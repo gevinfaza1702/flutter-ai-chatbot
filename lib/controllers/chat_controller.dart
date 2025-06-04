@@ -1,4 +1,6 @@
-import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../models/chat_session.dart';
 import '../models/chat_message.dart';
 
@@ -16,14 +18,38 @@ class ChatController {
     return sessions.firstWhere((s) => s.id == id, orElse: () => createSession());
   }
 
-  Stream<ChatMessage> sendMessage(ChatSession session, String text) async* {
-    final userMsg = ChatMessage(text: text, isUser: true);
+  Future<void> sendMessageToBot(ChatSession session, String userInput) async {
+    final userMsg = ChatMessage(text: userInput, isUser: true);
     session.messages.add(userMsg);
-    yield userMsg;
 
-    await Future.delayed(const Duration(seconds: 1));
-    final botMsg = ChatMessage(text: 'Bot: $text', isUser: false);
-    session.messages.add(botMsg);
-    yield botMsg;
+    final url = Uri.parse('https://api.openai.com/v1/chat/completions');
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $openAIApiKey',
+        },
+        body: jsonEncode({
+          'model': 'gpt-3.5-turbo',
+          'messages': [
+            {'role': 'user', 'content': userInput}
+          ]
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['choices'][0]['message']['content'];
+        session.messages.add(ChatMessage(text: content, isUser: false));
+      } else {
+        session.messages.add(ChatMessage(
+            text: 'Error ${response.statusCode}: ${response.reasonPhrase}',
+            isUser: false));
+      }
+    } catch (e) {
+      session.messages
+          .add(ChatMessage(text: 'Error: $e', isUser: false));
+    }
   }
 }
