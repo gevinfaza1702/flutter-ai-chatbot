@@ -1,5 +1,0 @@
-Flask
-pandas
-spacy
-requests
-beautifulsoup4
